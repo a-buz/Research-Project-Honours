@@ -1,34 +1,38 @@
-#https://www.longpaddock.qld.gov.au/cgi-bin/silo/DataDrillDataset.php?format=file_format&lat=Y&lon=X&start=yyyymmdd&finish=yyyymmdd&username=my_username&password=my_password
+#------------------------------------------------#
+# Script to download SILO data                   #
+# This script uses the new SILO API              #
+#------------------------------------------------#
 
+# Create directories if they do not exist
+if(dir.exists('Data/SILO') == FALSE) {
+  dir.create('Data/SILO', recursive = TRUE)  
+}
 
-##Downloading SILO rainfall Data
-setwd("E:\\University\\Honours\\Research Project\\SILO")
-dir.create(paste0("rainfall"), showWarnings = FALSE)
-dir.create(paste0("standard"), showWarnings = FALSE)
-dir.create(paste0("Morton"), showWarnings = FALSE)
+# Read in rivers file
+Rivers <- read.csv('Data/hrs_station_details.csv', skip = 11, header = TRUE)
+Rivers <- Rivers[order(Rivers$AWRC.Station.Number),]
+
+# Set SILO API parameters
+apiurl <- 'https://siloapi.longpaddock.qld.gov.au'
+apiKey <- '' # Paste SILO API key here
+dataFormat <- 'csv'
+startDate <- '19900101'
+endDate <- '20101231'
+variables <- 'max_temp,min_temp,daily_rain,et_morton_potential'
+# Only the following variables are available: daily_rain, max_temp, min_temp, evap_pan, vp, mslp, radiation, rh_tmax, rh_tmin, vp_deficit, evap_syn, evap_comb, evap_morton_lake, et_morton_actual, et_morton_potential, et_morton_wet, et_short_crop, et_tall_crop.'
+
+for (i in 1:nrow(Rivers)) {
+  downloadFile <- paste0('Data/SILO/', Rivers$AWRC.Station.Number[i], '.csv')
+  if(file.exists(downloadFile) == FALSE) {
+    URL <- paste0(apiurl, '/pointdata?',
+                  'lat=', round(Rivers$Latitude[i]/0.05)*0.05,
+                  '&lon=', round(Rivers$Longitude[i]/0.05)*0.05, 
+                  '&apikey=', apiKey,
+                  '&start=', startDate,
+                  '&finish=', endDate,
+                  '&format=', dataFormat,
+                  '&variables=', variables)
   
-Rivers <- read.csv("Final_Rivers.csv", header = TRUE)
-Rivers <- Rivers[order(Rivers$Station_Number),]
-
-for (i in 1:nrow(Rivers)) {
-  URL <- paste(c("https://www.longpaddock.qld.gov.au/cgi-bin/silo/DataDrillDataset.php?format=RainOnly&lat=", Rivers$LAT[i], "&lon=", Rivers$LON[i], 
-                 "&start=19900101&finish=20101231&username=UOSTRAN&password=BRUCE2165"), collapse = "")
-  SiteNumber <- Rivers$Station_Number[i]
-  download.file(URL, file.path(paste0("rainfall"),  destfile = paste(SiteNumber,".txt", sep = "")), method = "libcurl")
-}
-
-##Downloading SILO Standard data
-for (i in 1:nrow(Rivers)) {
-  URL <- paste(c("https://www.longpaddock.qld.gov.au/cgi-bin/silo/DataDrillDataset.php?format=Standard&lat=", Rivers$LAT[i], "&lon=", Rivers$LON[i], 
-                 "&start=19900101&finish=20101231&username=UOSTRAN&password=BRUCE2165"), collapse = "")
-  SiteNumber <- Rivers$Station_Number[i]
-  download.file(URL, file.path(paste0("standard"),  destfile = paste(SiteNumber,".txt", sep = "")), method = "libcurl")
-}
-
-#Downloading Morton PET
-for (i in 1:nrow(Rivers)) {
-  URL <- paste(c("https://www.longpaddock.qld.gov.au/cgi-bin/silo/DataDrillDataset.php?format=Allmort&lat=", Rivers$LAT[i], "&lon=", Rivers$LON[i], 
-                 "&start=19900101&finish=20101231&username=UOSTRAN&password=BRUCE2165"), collapse = "")
-  SiteNumber <- Rivers$Station_Number[i]
-  download.file(URL, file.path(paste0("Morton"),  destfile = paste(SiteNumber,".txt", sep = "")), method = "libcurl")
+    download.file(URL, destfile = downloadFile, method = 'libcurl')
+  }
 }
