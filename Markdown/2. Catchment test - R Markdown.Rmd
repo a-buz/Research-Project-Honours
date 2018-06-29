@@ -10,30 +10,29 @@ The rivers files refers to streamflow data from the 222 hydrological reference s
 
 ```{r}
 #install.packages("tidyverse")
-require(tidyverse)
+library(tidyverse)
 start.time <- Sys.time()
 
-setwd("E:\\University\\Honours\\Data Access\\Rivers")
-rivers <- list.files("E:\\University\\Honours\\Data Access\\Rivers")
+# Get list of river data
+rivers <- list.files("Data/Rivers", full.names = TRUE)
 ```
-
 
 An empty dataframe for the resulting data was creating.
 The dataframe (river.accuracy) consists of 3 columns: station number, station name and flow_accuracy.
 The Accuracy is calculated by dividing the number of Quality Codes listed "A" by the length of the data
 
-```{r}
+```{r, message=FALSE, warning=FALSE}
 name <- c("Date", "Flow", "QCode") #name of the columns in river files
-river.accuracy <- data.frame(Station_Number = rep(NA, length(rivers)), 
-                             Station_name = rep(NA, length(rivers)),
-                             flow_accuracy = rep(NA, length(rivers))) ##Empty dataframe to store the data in 
+river.accuracy <- data.frame(AWRC.Station.Number = rep(NA, length(rivers)), 
+                             Station.Name = rep(NA, length(rivers)),
+                             Flow.Accuracy = rep(NA, length(rivers))) ##Empty dataframe to store the data in 
 
 for (i in 1:length(rivers)) {
   header <- read_csv(rivers[i], col_names = F, n_max=26)
-  river.accuracy[i,1] <- substr(rivers[i], 1, gregexpr("\\.",rivers[[i]])[[1]]-1) ##Extract number
-  river.accuracy[i,2] <- substr(header[15,2],1,gregexpr("\\ ",header[15,2])[[1]]-1) ##Extract name
+  river.accuracy[i,1] <- basename(gsub(pattern = "\\.csv$", "", rivers[i])) ##Extract number
+  river.accuracy[i,2] <- gsub("\\s*\\([^\\)]+\\)", "", header[15,2]) ##Extract name
   
-  riverFile <- read_csv(rivers[i], skip = 26, col_names = name) ##26 = number of non-essential lines
+  riverFile <- read_csv(rivers[i], skip = 27, col_names = name) ##26 = number of non-essential lines
   riverFile$Date <- as.POSIXct(as.character(riverFile$Date), format = "%Y-%m-%d") ##Convert data to POSIXct format
   riverFile <- subset(riverFile, Date >= "1990-01-01" & Date <= "2010-12-31") ##This is our study date
   
@@ -51,15 +50,16 @@ end.time <- Sys.time()
 time.taken <- end.time - start.time
 time.taken ##49.5s
 
-write.csv(river.accuracy, file = "Catchment Quality.csv", row.names = FALSE)
+write.csv(river.accuracy, file = "Data/CatchmentQuality.csv", row.names = FALSE)
 ```
+AB: The bottom code seems irrelevant
 
 Testing code quality for Tasmania/NSW - few positive results
 
 ##Just taking NSW/TAS - Testing the quality of the codes. 
 
 ```{r}
-NSW.TAS <- read.csv("E:\\University\\Honours\\Data Access\\HRS_Nos_as_of_20140711.csv", header = T)
+NSW.TAS <- read.csv("Data/hrs_station_details.csv", header = TRUE, skip = 11)
 NSW.TAS$AWRC.Station.Number <- as.character(NSW.TAS$AWRC.Station.Number)
 
 Catchments <- NSW.TAS$AWRC.Station.Number[which(NSW.TAS$Jurisdiction == "NSW"|

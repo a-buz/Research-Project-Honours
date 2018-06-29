@@ -34,17 +34,14 @@ Roundabout process to get a list of the files from the Z: drive.
 
 ```{r}
 ############----------READING STREAMFLOW Rivers---------##############
+if(dir.exists('Data/Rivers') == FALSE) {
+  dir.create('Data/Rivers', recursive = TRUE)  
+}
 
-setwd("F:\\University\\Honours\\Research Project")
-dir.create(paste0("Rivers"), showWarnings = FALSE)
-
-#install.packages("RCurl")
-library(RCurl)
-
-name <- c("ID", "Station_Number", "Hydrstra_Site.ID", "LAT", "LON", "Site_Name", "Jurisdiction")
-Rivers <- read.csv("HRS_Nos_as_of_20140711.csv", col.names = name)
-Rivers$Station_Number <- as.character(Rivers$Station_Number)
-Rivers$Site_Name <- as.character(Rivers$Site_Name)
+#name <- c("ID", "Station_Number", "Hydrstra_Site.ID", "LAT", "LON", "Site_Name", "Jurisdiction")
+Rivers <- read.csv("Data/hrs_station_details.csv", skip = 11)
+Rivers$AWRC.Station.Number <- as.character(Rivers$AWRC.Station.Number)
+Rivers$Station.Name <- as.character(Rivers$Station.Name)
 ```
 
 Create a Rivers folder. Extracting the HRS from the csv file and convert them to characters.
