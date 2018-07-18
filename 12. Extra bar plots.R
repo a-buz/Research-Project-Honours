@@ -1,0 +1,73 @@
+temp <- read.csv("E:\\University\\Honours\\Data Access\\Modelling\\Results\\River Character.csv")
+
+hist(temp$Area, xlab = expression("Area"~(km^2)), breaks = 10, main = NULL)
+
+setwd("E:\\University\\Honours\\Data Access\\Modelling\\Results")
+
+obs_1990 <- read.csv("obs.summary2_1990.csv", header = TRUE)
+obs_2000 <- read.csv("obs.summary2_2000.csv", header = TRUE)
+
+obs2_1990 <- data.frame(Number = obs_1990$Number, obs_1990[,c(10:11, 17:22)])
+obs2_2000 <- data.frame(Number = obs_2000$Number, obs_2000[,c(10:11, 17:22)])
+
+temp <- merge(obs2_1990, obs2_2000, by = "Number")
+#colnames(temp) <- c("Number", "Wet", "Dry")
+temp$Diff <- (temp$Viney.x - temp$Viney.y)
+
+barplot(temp$Diff, ylim = c(0,1), xlab = "Station Number", 
+        ylab = "Difference")
+plot(temp$FDC.low.x/temp$FDC.low.y, temp$Diff, ylab = "Difference")
+abline(0,1)
+plot(temp$AC.x - temp$AC.y, temp$Diff, ylab = "Difference")
+abline(0,1)
+plot(temp$Diff, temp$FDC.mid.y, ylab = "Difference")
+
+###---------------FDC.high--------------------### Difference
+
+obs_1990 <- data.frame(Number = obs_1990$Number, x1 = obs_1990$x1)
+obs_2000 <- data.frame(Number = obs_2000$Number, x1 = obs_2000$x1)
+
+temp <- merge(obs_1990, obs_2000, by = "Number")
+temp$Diff <- (temp$x1.x - temp$x1.y)
+
+barplot(temp$Diff, xlab = "Station Number", 
+        ylab = "Difference")
+plot(temp$x1.y, temp$x1.x)
+abline(0,1)
+
+##Model Paremeters
+setwd("E:\\University\\Honours\\Data Access\\Modelling\\Results")
+
+obs_1990 <- read.csv("obs.summary2_1990.csv", header = TRUE)
+obs_2000 <- read.csv("obs.summary2_2000.csv", header = TRUE)
+
+obs2_1990 <- data.frame(Number = obs_1990$Number, x1 = obs_1990$x1)
+obs2_2000 <- data.frame(Number = obs_2000$Number, x1 = obs_2000$x1)
+
+temp <- merge(obs2_1990, obs2_2000, by = "Number")
+
+par(mfrow = c(2,2))
+plot(temp$x1.y, temp$x1.x, xlab = "x1 (Dry)", ylab = "x1 (Wet)")
+abline(0,1)
+
+obs2_1990 <- data.frame(Number = obs_1990$Number, x2 = obs_1990$x2)
+obs2_2000 <- data.frame(Number = obs_2000$Number, x2 = obs_2000$x2)
+temp <- merge(obs2_1990, obs2_2000, by = "Number")
+
+plot(temp$x2.y, temp$x2.x, xlab = "x2 (Dry)", ylab = "x2 (Wet)")
+abline(0,1)
+
+obs2_1990 <- data.frame(Number = obs_1990$Number, x3 = obs_1990$x3)
+obs2_2000 <- data.frame(Number = obs_2000$Number, x3 = obs_2000$x3)
+temp <- merge(obs2_1990, obs2_2000, by = "Number")
+
+plot(temp$x3.y, temp$x3.x, xlab = "x3 (Dry)", ylab = "x3 (Wet)")
+abline(0,1)
+
+obs2_1990 <- data.frame(Number = obs_1990$Number, x4 = obs_1990$x4)
+obs2_2000 <- data.frame(Number = obs_2000$Number, x4 = obs_2000$x4)
+temp <- merge(obs2_1990, obs2_2000, by = "Number")
+
+plot(temp$x4.y, temp$x4.x, xlab = "x4 (Dry)", ylab = "x4 (Wet)")
+abline(0,1)
+

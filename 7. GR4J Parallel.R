@@ -15,6 +15,7 @@ riverTable$Station.Name <- as.character(riverTable$Station.Name)
 GR4JColNames <-  c('Number', 
                    'Name',
                    'Area',
+                   'objFun',
                    'x1',
                    'x2',
                    'x3',
@@ -24,7 +25,7 @@ GR4JColNames <-  c('Number',
                    'NSE',
                    'r.sq.sqrt',
                    'r.sq.log',
-                   'objFun')
+                   'objFunVal')
 
 # Set up dir for output
 if(dir.exists('Data/GR4J/Fitted_1990_1996_3') == FALSE) {
@@ -47,17 +48,17 @@ writeLines(c(""), "log.txt")
 r <- foreach(i=1:nrow(riverTable), .combine=rbind, .packages=c('hydromad', 'zoo')) %dopar% {
   # Write to logfile
   sink("log.txt", append=TRUE)
-  cat(paste("Starting iteration", i, "of", nrow(riverTable), "\n"))
+  cat(paste(Sys.time(), "Starting iteration", i, "of", nrow(riverTable), "\n"))
   sink() # End diversion
   
   # Get river data
   riverDetails <- riverTable[riverTable$AWRC.Station.Number == basename(zooFiles[i]),]
-
+  
   # Read in zoo file from csv. read.csv.zoo() will not work for some reason
   river <- read.table(zooFiles[i], header = TRUE)
   river$Index <- as.Date(river$Index)
   river <- zoo(river[,2:4], order.by = river$Index)
-
+  
   # Set cal period and create hydromad variable
   river.cal <- window(river, start = "1990-01-01", end = "1996-12-31")
   CMod <- hydromad(river.cal,
@@ -68,34 +69,83 @@ r <- foreach(i=1:nrow(riverTable), .combine=rbind, .packages=c('hydromad', 'zoo'
                    x2 = c(-10,10),
                    x3 =c(5,500),
                    x4 = c(0.5,10))
-
+  
   # Fit with Viney's objective function
-  riverFit <- fitByOptim(CMod,
+  fitViney <- fitByOptim(CMod,
                          objective = function(Q, X, ...) {
                            hmadstat("r.squared")(Q, X, ...) -
-                           5*(abs(log(1+hmadstat("rel.bias")(Q,X)))^2.5)},
+                             5*(abs(log(1+hmadstat("rel.bias")(Q,X)))^2.5)},
                          samples=500,
                          method="PORT")
 
-  results  <- c(riverDetails$AWRC.Station.Number,
-                riverDetails$Station.Name,
-                riverDetails$Catchment.Area..km2.,
-                riverFit$parlist$x1,
-                riverFit$parlist$x2,
-                riverFit$parlist$x3,
-                riverFit$parlist$x4,
-                summary(riverFit)$runoff,
-                summary(riverFit)$rel.bias,
-                summary(riverFit)$r.squared,
-                summary(riverFit)$r.sq.sqrt,
-                summary(riverFit)$r.sq.log,
-                objFunVal(riverFit)
-                )
+  resultViney  <- c(riverDetails$AWRC.Station.Number,
+                    riverDetails$Station.Name,
+                    riverDetails$Catchment.Area..km2.,
+                    'Viney',
+                    fitViney$parlist$x1,
+                    fitViney$parlist$x2,
+                    fitViney$parlist$x3,
+                    fitViney$parlist$x4,
+                    summary(fitViney)$runoff,
+                    summary(fitViney)$rel.bias,
+                    summary(fitViney)$r.squared,
+                    summary(fitViney)$r.sq.sqrt,
+                    summary(fitViney)$r.sq.log,
+                    objFunVal(fitViney)
+  )
   
-  fitted <- riverFit$fitted.values
+  # Fit with NSE objective function
+  fitNSE <- fitByOptim(CMod,
+                       objective = hmadstat('r.squared'),
+                       samples=500,
+                       method="PORT")
+  
+  resultNSE  <- c(riverDetails$AWRC.Station.Number,
+                  riverDetails$Station.Name,
+                  riverDetails$Catchment.Area..km2.,
+                  'NSE',
+                  fitNSE$parlist$x1,
+                  fitNSE$parlist$x2,
+                  fitNSE$parlist$x3,
+                  fitNSE$parlist$x4,
+                  summary(fitNSE)$runoff,
+                  summary(fitNSE)$rel.bias,
+                  summary(fitNSE)$r.squared,
+                  summary(fitNSE)$r.sq.sqrt,
+                  summary(fitNSE)$r.sq.log,
+                  objFunVal(fitNSE)
+  )
+  
+  # Fit with NSE objective function
+  fitRSQLog <- fitByOptim(CMod,
+                          objective = hmadstat('r.sq.log'),
+                          samples = 500,
+                          method = "PORT")
+  
+  resultRSQLog  <- c(riverDetails$AWRC.Station.Number,
+                     riverDetails$Station.Name,
+                     riverDetails$Catchment.Area..km2.,
+                     'RSquaredLog',
+                     fitNSE$parlist$x1,
+                     fitNSE$parlist$x2,
+                     fitNSE$parlist$x3,
+                     fitNSE$parlist$x4,
+                     summary(fitNSE)$runoff,
+                     summary(fitNSE)$rel.bias,
+                     summary(fitNSE)$r.squared,
+                     summary(fitNSE)$r.sq.sqrt,
+                     summary(fitNSE)$r.sq.log,
+                     objFunVal(fitNSE)
+  )
+  
+  fitted <- data.frame('Viney' = fitViney$fitted,
+                       'NSE' = fitNSE$fitted,
+                       'RSquaredLog' = fitRSQLog$fitted)
+  
   write.csv(fitted, paste("Data/GR4J/Fitted_1990_1996_3/", riverDetails$AWRC.Station.Number, ".csv", sep = ""),
             row.names = FALSE)
   
+  results <- t(matrix(c(resultViney,resultNSE,resultRSQLog), ncol = 3))
   return(results)
 }
 
@@ -107,7 +157,3 @@ GR4JSummary <- as.data.frame(r, row.names = FALSE)
 colnames(GR4JSummary) <- GR4JColNames
 
 write.csv(GR4JSummary, 'Data/GR4JSummary.csv', row.names = FALSE)
-
-
-# Can easily add more objective functions in parallel by creating more variables and returning as a
-# list with the result of the three objective functions
