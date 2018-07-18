@@ -7,8 +7,7 @@ output: word_document
 
 ```{r}
 ########-----------------FLOW DURATION CURVES-------------------########
-setwd("F:\\University\\Honours\\Research Project\\Modelling\\zoo SILO")
-river.list <- dir()
+river.list <- dir('Data/Rivers')
 library(tidyverse)
 
 FDC.summary <- data.frame(Number = rep(NA, length(river.list)), 
@@ -31,10 +30,15 @@ Purpose of this was to plot the flow duration curves - e
 for (i in 1:length(river.list)) {
   load(river.list[i])
   
+  header <- read_csv(rivers[i], col_names = F, n_max = 26)
+  # Extract number using gsub
+  river.accuracy[i,1] <- gsub(".*\\((.*)\\).*", "\\1", header[15,2])
+  # Extract name
+  river.accuracy[i,2] <- gsub("\\s*\\([^\\)]+\\)", "", header[15,2])
+  
   #Extract river number and name
-  river.number <- as.character(strsplit(river.list[i], ".Rdata"))
-  header <- read_csv(paste("F:\\University\\Honours\\Research Project\\Modelling\\Rivers\\",river.number, ".csv", sep = ""), 
-                     n_max = 26, col_names = F)
+  river.number <- as.character(unlist(strsplit(river.list[i], '.csv')))
+  header <- read_csv(paste0('../Data/Rivers/', river.number, ".csv", sep = ""), n_max = 26, col_names = F)
   river.name <- as.character(substr(header[15,2],1,gregexpr("\\ ",header[15,2])[[1]]-1)) ##Extract name
   Area <- read.csv(paste("F:\\University\\Honours\\Research Project\\Modelling\\Rivers\\",river.number, ".csv", sep = ""),
                    sep = c(" ", ",")) ##Read in river file to extract area

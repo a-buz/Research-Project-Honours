@@ -15,14 +15,18 @@ river.accuracy <- data.frame(AWRC.Station.Number = rep(NA, length(rivers)),
                              Station.Name = rep(NA, length(rivers)),
                              Flow.Accuracy = rep(NA, length(rivers))) 
 
+
+
 # Extract river accuracy
 for (i in 1:length(rivers)) {
   # Read header file from data to extract AWRC river number and name
-  header <- read_csv(rivers[i], col_names = F, n_max = 26)
+  header <- read_csv(rivers[i], col_names = F, skip = 14, n_max = 1)
+  # Get full name and AWRC number from header by collapsing rows
+  river.name <- paste(header[1,-1], collapse = ' ')
   # Extract number using gsub
-  river.accuracy[i,1] <- gsub(".*\\((.*)\\).*", "\\1", header[15,2])
+  river.accuracy[i,1] <- gsub(".*\\((.*)\\).*", "\\1", river.name)
   # Extract name
-  river.accuracy[i,2] <- gsub("\\s*\\([^\\)]+\\)", "", header[15,2])
+  river.accuracy[i,2] <- gsub("\\s*\\([^\\)]+\\)", "", river.name)
   
   # Read river file. Skipping header and default column names
   riverFile <- read_csv(rivers[i], skip = 27, col_names = name)
@@ -35,10 +39,9 @@ for (i in 1:length(rivers)) {
 }
 # End loop
 
-# Order by accuracy and then cut off less than 90. The 90 cut off is likely redundant
-# as the data we download is already based off this cut off
+# Order by accuracy and then cut off less than 90
 river.accuracy <- river.accuracy[order(-river.accuracy[,3], river.accuracy[,2], river.accuracy[,1]),]
-river.accuracy <- river.accuracy[which(river.accuracy$flow_accuracy > 90),] ###111
+river.accuracy <- river.accuracy[which(river.accuracy$Flow.Accuracy > 90),]
 
 # Write CSV
 write_csv(river.accuracy, path = "Data/CatchmentQuality.csv")
