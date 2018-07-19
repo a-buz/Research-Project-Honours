@@ -1,10 +1,11 @@
+#--------------------------------------------------------------------------------------------------#
+# GR4J model run                                                                                   #
+#--------------------------------------------------------------------------------------------------#
+
 library(foreach)
 library(doParallel)
 
-# SetWD
-setwd('~/Dropbox (Sydney Uni)/BTPaper/Research-Project-Honours')
-
-# River zoo files from previous step containing P, Q, ET
+# River zoo files from previous step containing P, Q, E
 zooFiles <- dir('Data/Zoo', full.names = TRUE)
 # River details look up table
 riverTable <- read.csv("Data/FinalStations.csv")
@@ -37,8 +38,8 @@ if(dir.exists('Data/GR4J/Fitted_1990_1996_3') == FALSE) {
 #--------------------------------------------------------------------------------------------------#
 # Set cores to 1 minus cores on machine, including logical cores.
 # Set cluster to 1 less of the amount of cores 
-cores <- detectCores()
-cl <- makeCluster(cores - 1)
+cores <- detectCores(logical = FALSE)
+cl <- makeCluster(cores)
 registerDoParallel(cl, cores=cores)
 
 # Create log file to check progress
@@ -70,28 +71,32 @@ r <- foreach(i=1:nrow(riverTable), .combine=rbind, .packages=c('hydromad', 'zoo'
                    x3 =c(5,500),
                    x4 = c(0.5,10))
   
-  # Fit with Viney's objective function
-  fitViney <- fitByOptim(CMod,
-                         objective = function(Q, X, ...) {
-                           hmadstat("r.squared")(Q, X, ...) -
-                             5*(abs(log(1+hmadstat("rel.bias")(Q,X)))^2.5)},
-                         samples=500,
-                         method="PORT")
-
-  resultViney  <- c(riverDetails$AWRC.Station.Number,
-                    riverDetails$Station.Name,
-                    riverDetails$Catchment.Area..km2.,
-                    'Viney',
-                    fitViney$parlist$x1,
-                    fitViney$parlist$x2,
-                    fitViney$parlist$x3,
-                    fitViney$parlist$x4,
-                    summary(fitViney)$runoff,
-                    summary(fitViney)$rel.bias,
-                    summary(fitViney)$r.squared,
-                    summary(fitViney)$r.sq.sqrt,
-                    summary(fitViney)$r.sq.log,
-                    objFunVal(fitViney)
+  # Fit KGE
+  fitKGE <- fitByOptim(CMod,
+                       objective = function(Q, X, ...) {
+                         1 - sqrt(
+                           (cor(X, Q) - 1)^2 +
+                             (mean(X)/mean(Q) - 1)^2 +
+                             (sd(X)/sd(Q) - 1)^2
+                         )
+                       },
+                       samples = 500,
+                       method = "PORT")
+  
+  resultKGE  <- c(riverDetails$AWRC.Station.Number,
+                  riverDetails$Station.Name,
+                  riverDetails$Catchment.Area..km2.,
+                  'KGE',
+                  fitKGE$parlist$x1,
+                  fitKGE$parlist$x2,
+                  fitKGE$parlist$x3,
+                  fitKGE$parlist$x4,
+                  summary(fitKGE)$runoff,
+                  summary(fitKGE)$rel.bias,
+                  summary(fitKGE)$r.squared,
+                  summary(fitKGE)$r.sq.sqrt,
+                  summary(fitKGE)$r.sq.log,
+                  objFunVal(fitKGE)
   )
   
   # Fit with NSE objective function
@@ -138,14 +143,16 @@ r <- foreach(i=1:nrow(riverTable), .combine=rbind, .packages=c('hydromad', 'zoo'
                      objFunVal(fitNSE)
   )
   
-  fitted <- data.frame('Viney' = fitViney$fitted,
-                       'NSE' = fitNSE$fitted,
-                       'RSquaredLog' = fitRSQLog$fitted)
+  # Create list of fitted mode objects
+  fitted <- list('KGE' = fitKGE,
+                 'NSE' = fitNSE,
+                 'RSquaredLog' = fitRSQLog)
   
-  write.csv(fitted, paste("Data/GR4J/Fitted_1990_1996_3/", riverDetails$AWRC.Station.Number, ".csv", sep = ""),
-            row.names = FALSE)
+  # Write
+  save(fitted, file = paste("Data/GR4J/Fitted_1990_1996_3/", riverDetails$AWRC.Station.Number, ".Rdata", sep = ""))
   
-  results <- t(matrix(c(resultViney,resultNSE,resultRSQLog), ncol = 3))
+  # Get summary results
+  results <- t(matrix(c(resultKGE,resultNSE,resultRSQLog), ncol = 3))
   return(results)
 }
 
