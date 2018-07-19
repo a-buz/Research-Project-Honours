@@ -15,7 +15,7 @@ rivers <- read_csv('Data/FinalStations.csv')
 
 # Set SILO API parameters
 apiurl <- 'https://siloapi.longpaddock.qld.gov.au'
-apiKey <- 'Akhi03HxgFWclJXwTnzWU4V9oZBf0oO3G2z1F6vL' # Paste SILO API key here
+apiKey <- '' # Paste SILO API key here
 dataFormat <- 'csv'
 startDate <- '19900101'
 endDate <- '20101231'
