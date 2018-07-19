@@ -134,16 +134,16 @@ r <- foreach(i=1:nrow(riverTable), .combine=rbind, .packages=c('hydromad', 'zoo'
                      riverDetails$Station.Name,
                      riverDetails$Catchment.Area..km2.,
                      'RSquaredLog',
-                     fitNSE$parlist$x1,
-                     fitNSE$parlist$x2,
-                     fitNSE$parlist$x3,
-                     fitNSE$parlist$x4,
-                     summary(fitNSE)$runoff,
-                     summary(fitNSE)$rel.bias,
-                     summary(fitNSE)$r.squared,
-                     summary(fitNSE)$r.sq.sqrt,
-                     summary(fitNSE)$r.sq.log,
-                     objFunVal(fitNSE)
+                     fitRSQLog$parlist$x1,
+                     fitRSQLog$parlist$x2,
+                     fitRSQLog$parlist$x3,
+                     fitRSQLog$parlist$x4,
+                     summary(fitRSQLog)$runoff,
+                     summary(fitRSQLog)$rel.bias,
+                     summary(fitRSQLog)$r.squared,
+                     summary(fitRSQLog)$r.sq.sqrt,
+                     summary(fitRSQLog)$r.sq.log,
+                     objFunVal(fitRSQLog)
   )
   
   # Create list of fitted mode objects
