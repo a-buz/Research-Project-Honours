@@ -15,8 +15,6 @@ river.accuracy <- data.frame(AWRC.Station.Number = rep(NA, length(rivers)),
                              Station.Name = rep(NA, length(rivers)),
                              Flow.Accuracy = rep(NA, length(rivers))) 
 
-
-
 # Extract river accuracy
 for (i in 1:length(rivers)) {
   # Read header file from data to extract AWRC river number and name
@@ -34,8 +32,13 @@ for (i in 1:length(rivers)) {
   riverFile$Date <- as.POSIXct(as.character(riverFile$Date), format = "%Y-%m-%d")
   riverFile <- subset(riverFile, Date >= "1990-01-01" & Date <= "2010-12-31")
   
+  # Make sure the station operates for all dates
   # Find how much of the data has an accuracy code of A
-  river.accuracy[i,3] <- length(riverFile$QCode[which(riverFile$QCode == "A")])/length(riverFile$QCode)*100
+  if(min(riverFile$Date) == as.Date('1990-01-01') & max(riverFile$Date) == as.Date('2010-12-31')) {
+    river.accuracy[i,3] <- length(riverFile$QCode[which(riverFile$QCode == "A")])/length(riverFile$QCode)*100  
+  } else {
+    river.accuracy[i,3] <- 0 # 0 if not for all dates
+  }
 }
 # End loop
 

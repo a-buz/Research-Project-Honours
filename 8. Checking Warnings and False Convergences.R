@@ -1,108 +1,58 @@
-##Analysis of Results:
+# Analysis of Results
+library(tidyverse)
 
-setwd("E:\\University\\Honours\\Data Access\\Modelling\\Results\\Round 5")
+# Read in station list
+finalStations <- read_csv('Data/FinalStations.csv')
 
-##Fitted modelled flow (2000_2006)
-sim6y1990.2   <- dir(path = ".\\Fitted_1990_1996_2\\", pattern = ".rdata")
-sim6y1990.3   <- dir(path = ".\\Fitted_1990_1996_3\\", pattern = ".rdata")
-sim10y1990.2  <- dir(path = ".\\Fitted_1990_1996_2\\", pattern = ".rdata")
-sim10y1990.3  <- dir(path = ".\\Fitted_1990_1996_3\\", pattern = ".rdata")
-sim6y2000.2   <- dir(path = ".\\Fitted_2000_2006_2\\", pattern = ".rdata")
-sim6y2000.3   <- dir(path = ".\\Fitted_2000_2006_3\\", pattern = ".rdata")
-sim10y2000.2  <- dir(path = ".\\Fitted_2000_2006_2\\", pattern = ".rdata")
-sim10y2000.3  <- dir(path = ".\\Fitted_2000_2006_3\\", pattern = ".rdata")
+# Fitted models
+fittedModels <- list.dirs('Data/GR4J')
+# Remove base dir
+fittedModels <- fittedModels[-1]
 
-obs_flow <- dir(path = "E:\\University\\Honours\\Data Access\\Modelling\\zoo SILO", pattern = ".Rdata")
+# Making a table for the messages
+messages <- matrix(ncol = length(fittedModels)+1,
+                   nrow = nrow(finalStations))
+colnames(messages) <- c('Number', basename(fittedModels))
+messages <- as.tibble(messages)
+messages$Number <- finalStations$`AWRC Station Number`
 
-##Making a table for the messages
-Message <- data.frame(Number = rep(NA, length(obs_flow)), 
-                      y6.1990.2  =  rep(NA, length(obs_flow)),
-                      y6.1990.3  =  rep(NA, length(obs_flow)),
-                      y10.1990.2 =  rep(NA, length(obs_flow)),
-                      y10.1990.3 =  rep(NA, length(obs_flow)),
-                      y6.2000.2  =  rep(NA, length(obs_flow)),
-                      y6.2000.3  =  rep(NA, length(obs_flow)),
-                      y10.2000.2 =  rep(NA, length(obs_flow)),
-                      y10.2000.3 =  rep(NA, length(obs_flow)))
+# Make separate tables for the 3 objFuns
+KGE <- messages
+NSE <- messages
+RSqLog <- messages
 
-#Names
-for (i in 1:length(obs_flow)) {
-  load(paste("E:\\University\\Honours\\Data Access\\Modelling\\zoo SILO\\", obs_flow[i], sep = ""))
-  
-  ##Extracting number, name and Area for conversion
-  river.number <- as.character(strsplit(obs_flow[i], ".Rdata"))
-  
-  Message[i, 1] <- river.number
-}
-
-##Making a list of functions
-messages <-   function (x) {
-    load(paste(dir()[1], "\\", x, sep = ""))
-    
-    message <- riverFit$fit.result$message
+# Fill in tables
+for (i in 1:nrow(messages)) {
+  for(j in 2:length(colnames(messages))) {
+    load(paste0('Data/GR4J/', colnames(messages)[j], '/', messages$Number[i], '.Rdata'))
+    KGE[i,j] <- fitted$KGE$fit.result$message
+    NSE[i,j] <- fitted$NSE$fit.result$message
+    RSqLog[i,j] <- fitted$RSquaredLog$fit.result$message
   }
-message <- lapply(sim6y1990.2, FUN = messages)
-Message$y6.1990.2 <- message
-
-messages <-   function (x) {
-  load(paste(dir()[2], "\\", x, sep = ""))
-  
-  message <- riverFit$fit.result$message
-}
-message <- lapply(sim6y1990.3, FUN = messages)
-Message$y6.1990.3 <- message
-
-messages <-   function (x) {
-  load(paste(dir()[3], "\\", x, sep = ""))
-  
-  message <- riverFit$fit.result$message
-}
-message <- lapply(sim10y1990.2, FUN = messages)
-Message$y10.1990.2 <- message
-
-messages <-   function (x) {
-  load(paste(dir()[4], "\\", x, sep = ""))
-  
-  message <- riverFit$fit.result$message
-}
-message <- lapply(sim10y1990.3, FUN = messages)
-Message$y10.1990.3 <- message
-
-messages <-   function (x) {
-  load(paste(dir()[5], "\\", x, sep = ""))
-  
-  message <- riverFit$fit.result$message
-}
-message <- lapply(sim6y1990.2, FUN = messages)
-Message$y6.2000.2 <- message
-
-messages <-   function (x) {
-  load(paste(dir()[6], "\\", x, sep = ""))
-  
-  message <- riverFit$fit.result$message
-}
-message <- lapply(sim6y1990.3, FUN = messages)
-Message$y6.2000.3 <- message
-
-messages <-   function (x) {
-  load(paste(dir()[7], "\\", x, sep = ""))
-  
-  message <- riverFit$fit.result$message
-}
-message<- lapply(sim10y1990.2, FUN = messages)
-Message$y10.2000.2 <- message
-
-messages <-   function (x) {
-  load(paste(dir()[8], "\\", x, sep = ""))
-  
-  message <- riverFit$fit.result$message
-}
-message <- lapply(sim10y1990.3, FUN = messages)
-Message$y10.2000.3 <- message
-
-##Taking care of the "unimplemented type 'list' in 'EncodeElement" error
-for (i in 1:8) {
-  Message[,i+1] <- vapply(Message[,i+1], paste, collapse = ", ", character(1L))
 }
 
-write.csv(Message, file = "E:\\University\\Honours\\Data Access\\Modelling\\Results\\Convergence Checks.csv", row.names = FALSE)
+# Join tables together
+KGE <- KGE %>% 
+  gather(Model, Messages, -Number) %>% 
+  mutate(ObjFun = 'KGE')
+NSE <- NSE %>% 
+  gather(Model, Messages, -Number) %>% 
+  mutate(ObjFun = 'NSE')
+RSqLog <- RSqLog %>% 
+  gather(Model, Messages, -Number) %>% 
+  mutate(ObjFun = 'RSqLog')
+
+# Sort
+combinedFuns <- bind_rows(KGE,NSE,RSqLog) %>% 
+  group_by(Model, Number) %>% 
+  arrange(.by_group=T)
+
+# Find false convergences and non-convergences
+falseConverge <- 'false convergence (8)'
+evalLimit <- 'function evaluation limit reached without convergence (9)'
+
+converged <- combinedFuns %>% 
+  filter(!Messages %in% c(falseConverge, evalLimit))
+
+# Write
+write_csv(converged, 'Data/GR4J/ConvergenceChecked.csv')
