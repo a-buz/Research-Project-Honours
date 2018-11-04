@@ -1,172 +1,221 @@
-##Observed summary
+#
+# Observed summary analysis
+#
 
-setwd("F:\\University\\Honours\\Data Access\\Modelling\\Results")
+library(tidyverse)
 
-# obs_summary_1990 <- read.csv("obs.summary_1990.csv", header = TRUE)
-# obs_summary_2000 <- read.csv("obs.summary_2000.csv", header = TRUE)
-# sim_summary_1990 <- read.csv("sim.summary_1990.csv", header = TRUE)
-# sim_summary_2000 <- read.csv("sim.summary_2000.csv", header = TRUE)
-# 
-# par(mfrow = c(1,2))
-# boxplot(obs_summary_1990[,18:23])
-# boxplot(sim_summary_1990[,18:23])
-# 
-# range01 <- function(x){1-abs(x)/(max(x)-min(x))}
-# range02 <- function(x){(x - mean(x))/sd(x)}
-# 
-# ##Finding raw differences in signatures
-# sig_1990 <- data.frame(obs_summary_1990[,1:18], 
-#                        (sim_summary_1990[,19:21] - obs_summary_1990[,19:21]),
-#                        AC = abs(1 - sim_summary_1990[,22]/obs_summary_1990[,22]),
-#                        sim_summary_1990[,23:24] - obs_summary_1990[,23:24],
-#                        KGext = obs_summary_1990[,25])
-# sig_2000 <- data.frame(obs_summary_2000[,1:18], 
-#                        (sim_summary_2000[,19:21] - obs_summary_2000[,19:21]),
-#                        AC = abs(1 - sim_summary_2000[,22]/obs_summary_2000[,22]),
-#                        (sim_summary_2000[,23:24] - obs_summary_2000[,23:24]),
-#                        KGext = obs_summary_2000[,25])
-# 
-# hist(sig_1990$FDC.low)
+analyseMod <- function(model, timePeriod) {
+  # Model summary
+  modelSummary <- read_csv(paste('Data/Analysis/', timePeriod, '/', model, 'Summary.csv', sep = ''))
+  
+  # Split into different obj funs
+  kgeMod <- modelSummary %>% 
+    filter(objFun=='KGE')
+  nseMod <- modelSummary %>% 
+    filter(objFun=='NSE')
+  rsqlMod <- modelSummary %>% 
+    filter(objFun=='RSquaredLog')
+  
+  # PCA vars
+  # objfun -> ln(area), ln(cf), ln(fdc.low), ln(fdc.mid), ln(fdc.high), AC, ln(peaks), ln(slope)
+  
+  # KGE
+  kgeVars <- kgeMod %>% 
+    dplyr::select(KGE, Area, Cum.flow, FDC.low,
+                  FDC.mid, FDC.high, AC, Peaks,
+                  Slope, KGext, Type)
+  # Log vars
+  kgeVarsTf <- kgeVars %>% 
+    mutate(Area     = log(Area),
+           Cum.flow = log(Cum.flow + 0.1),
+           FDC.low  = log(FDC.low + 0.1),
+           FDC.mid  = log(FDC.mid + 0.1),
+           FDC.high = log(FDC.high + 0.1),
+           Peaks    = log(Peaks + 0.1),
+           Slope    = log(Slope + 0.1))
+  
+  kgePCA <- prcomp(kgeVarsTf %>% select(-KGext, -Type), scale = T, retx = T, center = T)
+  kgeLM <- lm(KGE ~ ., data = kgeVarsTf %>% select(-KGext))
+  
+  # NSE
+  nseVars <- nseMod %>% 
+    dplyr::select(NSE, Area, Cum.flow, FDC.low,
+                  FDC.mid, FDC.high, AC, Peaks,
+                  Slope, KGext, Type)
+  # Log vars
+  nseVarsTf <- nseVars %>% 
+    mutate(Area     = log(Area),
+           Cum.flow = log(Cum.flow + 0.1),
+           FDC.low  = log(FDC.low + 0.1),
+           FDC.mid  = log(FDC.mid + 0.1),
+           FDC.high = log(FDC.high + 0.1),
+           Peaks    = log(Peaks + 0.1),
+           Slope    = log(Slope + 0.1))
+  
+  nsePCA <- prcomp(nseVarsTf %>% select(-KGext, -Type), scale = T, retx = T, center = T)
+  nseLM <- lm(NSE ~ ., data = nseVarsTf %>% select(-KGext))
+  
+  # RSqLog
+  rsqlVars <- rsqlMod %>% 
+    dplyr::select(r.sq.log, Area, Cum.flow, FDC.low,
+                  FDC.mid, FDC.high, AC, Peaks,
+                  Slope, KGext, Type)
+  # Log vars
+  rsqlVarsTf <- rsqlVars %>% 
+    mutate(Area     = log(Area),
+           Cum.flow = log(Cum.flow + 0.1),
+           FDC.low  = log(FDC.low + 0.1),
+           FDC.mid  = log(FDC.mid + 0.1),
+           FDC.high = log(FDC.high + 0.1),
+           Peaks    = log(Peaks + 0.1),
+           Slope    = log(Slope + 0.1))
+  
+  rsqlPCA <- prcomp(rsqlVarsTf %>% select(-KGext, -Type), scale = T, retx = T, center = T)
+  rsqlLM <- lm(r.sq.log ~ ., data = rsqlVarsTf %>% select(-KGext))
+  
+  # Regression
+  returnList <- list(kgePCA  = kgePCA,  kgeVarsTf  = kgeVarsTf,  kgeLM  = kgeLM,
+                     nsePCA  = nsePCA,  nseVarsTf  = nseVarsTf,  nseLM  = nseLM,
+                     rsqlPCA = rsqlPCA, rsqlVarsTf = rsqlVarsTf, rsqlLM = rsqlLM)
+  return(returnList)
+}
 
+gr4j1990 <- analyseMod('GR4J', '1990_1996')
+gr4j2000 <- analyseMod('GR4J', '2000_2006')
 
-# sig_1990[,19:24] <- lapply(sig_1990[,19:24], range01)
-# sig_2000[,19:24] <- lapply(sig_2000[,19:24], range01)
+simhyd1990 <- analyseMod('SIMHYD', '1990_1996')
+simhyd2000 <- analyseMod('SIMHYD', '2000_2006')
 
-# obs_summary_1990[,17:22] <- lapply(obs_summary_1990[,17:22], range02)
-# obs_summary_2000[,17:22] <- lapply(obs_summary_2000[,17:22], range02)
-# sim_summary_1990[,17:22] <- lapply(sim_summary_1990[,17:22], range02)
-# sim_summary_2000[,17:22] <- lapply(sim_summary_2000[,17:22], range02)
+hbv1990 <- analyseMod('HBV', '1990_1996')
+hbv2000 <- analyseMod('HBV', '2000_2006')
 
-#write.csv(sig_1990, "sig_1990.csv")
-#write.csv(sig_2000, "sig_2000.csv")
-
-######-------------Analysis----------------###################
-setwd("F:\\University\\Honours\\Data Access\\Modelling\\Results")
-
-obs_1990 <- read.csv("obs.summary2_1990.csv", header = TRUE)
-obs_2000 <- read.csv("obs.summary2_2000.csv", header = TRUE)
-obs_2000$Number <- as.character(obs_2000$Number)
-obs_1990$Number <- as.character(obs_1990$Number)
-obs_1990$KGext <- as.factor(obs_1990$KGext)
-obs_2000$KGext <- as.factor(obs_2000$KGext)
-
-##PCA of observed
-obs1_1990 <- obs_1990[,c(10:11,17:22)]
-obs1_2000 <- obs_2000[,c(10:11,17:22)]
-
-obs1_1990[,c(1:2, 8)] <- log(obs1_1990[,c(1:2, 8)])
-obs1_1990$FDC.high <- log(obs1_1990$FDC.high)
-obs1_1990$FDC.low <- log(obs1_1990$FDC.low+0.1)
-obs1_1990$FDC.mid <- log(obs1_1990$FDC.mid+0.1)
-
-obs1_2000[,c(1:2)] <- log(obs1_2000[,c(1:2)])
-obs1_2000$Peaks <- log(obs1_2000$Peaks+0.1)
-obs1_2000$FDC.high <- log(obs1_2000$FDC.high)
-obs1_2000$FDC.low <- log(obs1_2000$FDC.low+0.1)
-obs1_2000$FDC.mid <- log(obs1_2000$FDC.mid+0.1)
-
-# obs1_1990 <- do.call(data.frame,lapply(obs1_1990, function(x) replace(x, is.infinite(x),NA)))
-# obs1_2000 <- do.call(data.frame,lapply(obs1_2000, function(x) replace(x, is.infinite(x),NA)))
-
-obs1_1990pc <- prcomp(obs1_1990, scale = T, retx = T, center = T)
-obs1_2000pc <- prcomp(obs1_2000, scale = T, retx = T, center = T)
-
-##According the the biplots (1990), the FDCs, cum.flow, x3, r.sq.log, AC are correlated to Viney
-
-par(mfrow = c(1,1))
-#pca
+# ------------------------------------------------------------------------------
+# PCA analysis
+# Biplots
+# Type
 library(car)
 library(ggfortify)
-autoplot(obs1_1990pc, data = obs_1990, colour = "KGext", 
+autoplot(gr4j1990$kgePCA, data = gr4j1990$kgeVarsTf, colour = "Type", 
          loadings = TRUE, loadings.label = TRUE, loadings.label.size = 5)
-autoplot(obs1_2000pc, data = obs_2000, colour = "KGext",
+autoplot(gr4j1990$nsePCA, data = gr4j1990$nseVarsTf, colour = "Type", 
          loadings = TRUE, loadings.label = TRUE, loadings.label.size = 5)
-autoplot(obs1_1990pc, data = obs_1990, colour = "Type", 
-         loadings = TRUE, loadings.label = TRUE, loadings.label.size = 5)
-autoplot(obs1_2000pc, data = obs_2000, colour = "Type",
+autoplot(gr4j1990$rsqlPCA, data = gr4j1990$rsqlVarsTf, colour = "Type", 
          loadings = TRUE, loadings.label = TRUE, loadings.label.size = 5)
 
-summary(obs1_1990pc)
-summary(obs1_2000pc)
-##So there does seem to be a monotonic relationship between the Viney and the FDC signatures - clearer after logging. 
+autoplot(gr4j2000$kgePCA, data = gr4j2000$kgeVarsTf, colour = "Type", 
+         loadings = TRUE, loadings.label = TRUE, loadings.label.size = 5)
+autoplot(gr4j2000$nsePCA, data = gr4j2000$nseVarsTf, colour = "Type", 
+         loadings = TRUE, loadings.label = TRUE, loadings.label.size = 5)
+autoplot(gr4j2000$rsqlPCA, data = gr4j2000$rsqlVarsTf, colour = "Type", 
+         loadings = TRUE, loadings.label = TRUE, loadings.label.size = 5)
 
-###Regression time
+autoplot(simhyd1990$kgePCA, data = simhyd1990$kgeVarsTf, colour = "Type", 
+         loadings = TRUE, loadings.label = TRUE, loadings.label.size = 5)
+autoplot(simhyd1990$nsePCA, data = simhyd1990$nseVarsTf, colour = "Type", 
+         loadings = TRUE, loadings.label = TRUE, loadings.label.size = 5)
+autoplot(simhyd1990$rsqlPCA, data = simhyd1990$rsqlVarsTf, colour = "Type", 
+         loadings = TRUE, loadings.label = TRUE, loadings.label.size = 5)
 
-obs1_1990$KGext <- obs_1990$KGext
-obs1_2000$KGext <- obs_2000$KGext
-obs1_1990$Type <- obs_1990$Type
-obs1_2000$Type <- obs_2000$Type
+autoplot(hbv1990$kgePCA, data = hbv1990$kgeVarsTf, colour = "Type", 
+         loadings = TRUE, loadings.label = TRUE, loadings.label.size = 5)
+autoplot(hbv1990$nsePCA, data = hbv1990$nseVarsTf, colour = "Type", 
+         loadings = TRUE, loadings.label = TRUE, loadings.label.size = 5)
+autoplot(hbv1990$rsqlPCA, data = hbv1990$rsqlVarsTf, colour = "Type", 
+         loadings = TRUE, loadings.label = TRUE, loadings.label.size = 5)
 
-cor(obs1_1990[,1:8], method = "pearson")
-cor(obs1_1990[,1:8], method = "spearman")
+# KGext
+autoplot(gr4j1990$kgePCA, data = gr4j1990$kgeVarsTf, colour = "KGext", 
+         loadings = TRUE, loadings.label = TRUE, loadings.label.size = 5)
+autoplot(gr4j1990$nsePCA, data = gr4j1990$nseVarsTf, colour = "KGext", 
+         loadings = TRUE, loadings.label = TRUE, loadings.label.size = 5)
+autoplot(gr4j1990$rsqlPCA, data = gr4j1990$rsqlVarsTf, colour = "KGext", 
+         loadings = TRUE, loadings.label = TRUE, loadings.label.size = 5)
 
-# lm_obs1_1990 <- lm(objFun ~ KGext+x3+x4+Area+rbias+r.sq.log
-#                    +AC, data = obs1_1990)
-lm_obs1_1990 <- lm(Viney ~ ., data = obs1_1990)
-#lm_obs1_1990 <- lm(Viney ~ .-CF-FDC.low-Slope, data = obs1_1990)
-lm_obs1_1990 <- lm(Viney ~ Area + FDC.mid + Peaks, data = obs1_1990)
-lm_obs1_1990 <- step(lm_obs1_1990, method = "both")
-vif(lm_obs1_1990)
-summary(lm_obs1_1990)
-autoplot(lm_obs1_1990)
-anova(lm_obs1_1990)
+autoplot(simhyd1990$kgePCA, data = simhyd1990$kgeVarsTf, colour = "KGext", 
+         loadings = TRUE, loadings.label = TRUE, loadings.label.size = 5)
+autoplot(simhyd1990$nsePCA, data = simhyd1990$nseVarsTf, colour = "KGext", 
+         loadings = TRUE, loadings.label = TRUE, loadings.label.size = 5)
+autoplot(simhyd1990$rsqlPCA, data = simhyd1990$rsqlVarsTf, colour = "KGext", 
+         loadings = TRUE, loadings.label = TRUE, loadings.label.size = 5)
 
-##Here, many of the variables are very highly correlated, such as the signatures 
-#(FDC.low, mid, high, Peaks and slope) > 0.8. Cum.flow is also high correlated to runoff (which makes sense)
-#Area, runoff, Peaks are significant. 
+autoplot(hbv1990$kgePCA, data = hbv1990$kgeVarsTf, colour = "KGext", 
+         loadings = TRUE, loadings.label = TRUE, loadings.label.size = 5)
+autoplot(hbv1990$nsePCA, data = hbv1990$nseVarsTf, colour = "KGext", 
+         loadings = TRUE, loadings.label = TRUE, loadings.label.size = 5)
+autoplot(hbv1990$rsqlPCA, data = hbv1990$rsqlVarsTf, colour = "KGext", 
+         loadings = TRUE, loadings.label = TRUE, loadings.label.size = 5)
 
-cor(obs1_2000[,1:9], method = "pearson", use = "pairwise.complete.obs")
-cor(obs1_2000[,1:9], method = "spearman", use = "pairwise.complete.obs")
+# ------------------------------------------------------------------------------
+# Regression
+library(car)
+# GR4J
+vif(gr4j1990$kgeLM)
+summary(gr4j1990$kgeLM)
+anova(gr4j1990$kgeLM)
 
-lm_obs1_2000 <- lm(Viney ~ .-FDC.low-FDC.mid,data = obs1_2000)
-lm_obs1_2000 <- lm(Viney ~ Type, data = obs1_2000)
-lm_obs1_2000 <- step(lm_obs1_2000, method = "backward")
-#library(car)
-vif(lm_obs1_2000)
-summary(lm_obs1_2000)
-autoplot(lm_obs1_2000)
-anova(lm_obs1_2000)
+vif(gr4j2000$kgeLM)
+summary(gr4j2000$kgeLM)
+anova(gr4j2000$kgeLM)
 
-#In the 1990 linear regression, Area, runoff, FDC,high, AC, and Peaks are significant
-#In the 2000 linear regression, Area, FDC.mid, Peaks are significant. 
+cor(gr4j1990$kgeVarsTf[,1:9], method = 'pearson',  use = 'pairwise.complete.obs')
+cor(gr4j2000$kgeVarsTf[,1:9], method = 'spearman', use = 'pairwise.complete.obs')
 
-#Adjust x3 on 2000
-
-##Story --> does memory affect streamflow? We used signatures
-##It does depending on the catchment an the climate. Drier catchments, AC has heavier focus compared to wetter. 
-##Correlated signatures. 
-
-##FLOW DURATION CURVE
-par(mfrow=c(1,1))
-n <- nrow(obs_1990)
-sort.flow_1990 <- sort(as.numeric(obs_1990$Viney), decreasing = TRUE, na.last=FALSE)
-
-m <- nrow(obs_2000)
-sort.flow_2000 <- sort(as.numeric(obs_2000$Viney), decreasing = TRUE, na.last=FALSE)
-
-#Sort - just a series of numbers now
-rank.flow_1990 <- 1:n
-Prob_1990 <- rank.flow_1990/(n+1) 
-
-rank.flow_2000 <- 1:m
-Prob_2000 <- rank.flow_2000/(m+1)
-
-plot(Prob_1990*100, sort.flow_1990, type = "l", xlab="Probability where Viney is exceeded", 
-     ylab="Viney", col = "red", ylim = c(0,1))
-lines(Prob_2000*100, sort.flow_2000, col="blue")
-legend("topright", col = c("red", "blue"), c("Wet", "Dry"), 
-       lty = c(1,1))
-
-#boxplots of signatures
+# Histograms of signatures
 par(mfrow = c(4,2))
-colnames(obs1_1990)
-hist(obs1_1990$Area, xlab = "log(Area)", main = NULL)
-hist(obs1_1990$CF, xlab = "log(CF)", main = NULL)
-hist(obs1_1990$FDC.low, xlab = "log(FDC.low)", main = NULL)
-hist(obs1_1990$FDC.mid, xlab = "log(FDC.mid)", main = NULL)
-hist(obs1_1990$FDC.high, xlab = "log(FDC.high)", main = NULL)
-hist(obs1_1990$AC, xlab = "AC", main = NULL)
-hist(obs1_1990$Peaks, xlab = "log(Peaks)", main = NULL)
-hist(obs1_1990$Slope, xlab = "log(Slope)", main = NULL)
+colnames(gr4j1990$kgeVarsTf)
+hist(gr4j1990$kgeVarsTf$Area, xlab = "log(Area)", main = NULL)
+hist(gr4j1990$kgeVarsTf$Cum.flow, xlab = "log(CF)", main = NULL)
+hist(gr4j1990$kgeVarsTf$FDC.low, xlab = "log(FDC.low)", main = NULL)
+hist(gr4j1990$kgeVarsTf$FDC.mid, xlab = "log(FDC.mid)", main = NULL)
+hist(gr4j1990$kgeVarsTf$FDC.high, xlab = "log(FDC.high)", main = NULL)
+hist(gr4j1990$kgeVarsTf$AC, xlab = "AC", main = NULL)
+hist(gr4j1990$kgeVarsTf$Peaks, xlab = "log(Peaks)", main = NULL)
+hist(gr4j1990$kgeVarsTf$Slope, xlab = "log(Slope)", main = NULL)
 
+# HBV
+vif(hbv1990$kgeLM)
+summary(hbv1990$kgeLM)
+anova(hbv1990$kgeLM)
 
+vif(hbv2000$kgeLM)
+summary(hbv2000$kgeLM)
+anova(hbv2000$kgeLM)
+
+cor(hbv1990$kgeVarsTf[,1:9], method = 'pearson',  use = 'pairwise.complete.obs')
+cor(hbv2000$kgeVarsTf[,1:9], method = 'spearman', use = 'pairwise.complete.obs')
+
+# Histograms of signatures
+par(mfrow = c(4,2))
+colnames(hbv1990$kgeVarsTf)
+hist(hbv1990$kgeVarsTf$Area, xlab = "log(Area)", main = NULL)
+hist(hbv1990$kgeVarsTf$Cum.flow, xlab = "log(CF)", main = NULL)
+hist(hbv1990$kgeVarsTf$FDC.low, xlab = "log(FDC.low)", main = NULL)
+hist(hbv1990$kgeVarsTf$FDC.mid, xlab = "log(FDC.mid)", main = NULL)
+hist(hbv1990$kgeVarsTf$FDC.high, xlab = "log(FDC.high)", main = NULL)
+hist(hbv1990$kgeVarsTf$AC, xlab = "AC", main = NULL)
+hist(hbv1990$kgeVarsTf$Peaks, xlab = "log(Peaks)", main = NULL)
+hist(hbv1990$kgeVarsTf$Slope, xlab = "log(Slope)", main = NULL)
+
+# SIMHYD
+vif(simhyd1990$kgeLM)
+summary(simhyd1990$kgeLM)
+anova(simhyd1990$kgeLM)
+
+vif(simhyd2000$kgeLM)
+summary(simhyd2000$kgeLM)
+anova(simhyd2000$kgeLM)
+
+cor(simhyd1990$kgeVarsTf[,1:9], method = 'pearson',  use = 'pairwise.complete.obs')
+cor(simhyd2000$kgeVarsTf[,1:9], method = 'spearman', use = 'pairwise.complete.obs')
+
+# Histograms of signatures
+par(mfrow = c(4,2))
+colnames(simhyd1990$kgeVarsTf)
+hist(simhyd1990$kgeVarsTf$Area, xlab = "log(Area)", main = NULL)
+hist(simhyd1990$kgeVarsTf$Cum.flow, xlab = "log(CF)", main = NULL)
+hist(simhyd1990$kgeVarsTf$FDC.low, xlab = "log(FDC.low)", main = NULL)
+hist(simhyd1990$kgeVarsTf$FDC.mid, xlab = "log(FDC.mid)", main = NULL)
+hist(simhyd1990$kgeVarsTf$FDC.high, xlab = "log(FDC.high)", main = NULL)
+hist(simhyd1990$kgeVarsTf$AC, xlab = "AC", main = NULL)
+hist(simhyd1990$kgeVarsTf$Peaks, xlab = "log(Peaks)", main = NULL)
+hist(simhyd1990$kgeVarsTf$Slope, xlab = "log(Slope)", main = NULL)

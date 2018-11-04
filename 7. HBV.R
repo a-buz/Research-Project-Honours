@@ -1,15 +1,16 @@
 #--------------------------------------------------------------------------------------------------#
-# GR4J model run                                                                                   #
+# HBV model run                                                                                 #
 #--------------------------------------------------------------------------------------------------#
 
 library(foreach)
 library(doParallel)
 library(hydromad)
+library(Rcpp)
 
 setwd('~/Dropbox (Sydney Uni)/BTPaper/Research-Project-Honours/')
 
 # Set up monolithic function to simplify unattended runs
-parallelRuns <- function(calStart, calEnd, x2) {
+parallelRuns <- function(calStart, calEnd) {
   #----------------------------------------------------------------------------#
   # Loop preparation #
   #----------------------------------------------------------------------------#
@@ -29,35 +30,16 @@ parallelRuns <- function(calStart, calEnd, x2) {
   riverTable$AWRC.Station.Number <- as.character(riverTable$AWRC.Station.Number)
   riverTable$Station.Name <- as.character(riverTable$Station.Name)
   # Column names for variables collected in loop
-  GR4JColNames <-  c('Number', 
-                     'Name',
-                     'Area',
-                     'objFun',
-                     'Message',
-                     'x1',
-                     'x2',
-                     'x3',
-                     'x4',
-                     'runoff',
-                     'rbias',
-                     'NSE',
-                     'r.sq.sqrt',
-                     'r.sq.log',
-                     'KGE')
-  # Non changing
-  x1 <- c(50,2000)
-  x3 <- c(5,500)
-  x4 <- c(0.5,10)
+  HBVColNames <-  c('Number', 'Name', 'Area', 'objFun', 'Message',
+                    'ck2', 'ck1', 'ck0', 'maxbas',
+                    'degd', 'degw', 'ttlim', 'perc',
+                    'beta', 'lp', 'fcap', 'hl1',
+                    'runoff', 'rbias', 'NSE', 'r.sq.sqrt',
+                    'r.sq.log', 'KGE')
   
-  # Bruce's naming convention
-  # if(min(x2) == -10 & max(x2) == 10) {
-  #   suffix <- '3' 
-  # } else if(min(x2) == -30 & max(x2) == 20) {
-  #   suffix <- '2'
-  # }
-  
-  runName <- paste0('Data/GR4J/Fitted_', substr(calStart, 1, 4),
-                    '_', substr(calEnd, 1, 4))#, '_', suffix)
+  runName <- paste0('Data/HBV/Fitted_',
+                    substr(calStart, 1, 4),
+                    '_', substr(calEnd, 1, 4))
   
   # Set up dir for output
   if(dir.exists(runName) == FALSE) {
@@ -76,7 +58,8 @@ parallelRuns <- function(calStart, calEnd, x2) {
   writeLines(c(""), paste0(runName, "_log.txt"))
   
   # Start parloop and assign to collector
-  r <- foreach(i=1:nrow(riverTable), .combine=rbind, .packages=c('hydromad')) %dopar% {
+  r <- foreach(i=1:length(zooFiles), .combine=rbind, .packages=c('hydromad', 'Rcpp'),
+               .verbose=TRUE) %dopar% {
     # Write to logfile
     sink(paste0(runName, "_log.txt"), append=TRUE)
     cat(paste(Sys.time(), "Starting iteration", i, "of", nrow(riverTable), "\n"))
@@ -86,20 +69,30 @@ parallelRuns <- function(calStart, calEnd, x2) {
     riverDetails <- riverTable[riverTable$AWRC.Station.Number == basename(zooFiles[i]),]
     
     # Read in zoo file from csv. read.csv.zoo() will not work for some reason
-    river <- read.table(zooFiles[i], header = TRUE)
-    river$Index <- as.Date(river$Index)
-    river <- zoo(river[,2:4], order.by = river$Index)
+    river <- read.zoo(zooFiles[i], header = TRUE)
     
     # Set cal period and create hydromad variable
     river.cal <- window(river, start = calStart, end = calEnd)
-    CMod <- hydromad(river.cal,
-                     sma="gr4j",
-                     routing="gr4jrouting",
-                     etmult=1, # Supplied PET
-                     x1 = x1,
-                     x2 = x2,
-                     x3 = x3,
-                     x4 = x4)
+    
+    source('HBV/HBV.R')
+    
+    # Pars based from http://dx.doi.org/10.1016/j.jhydrol.2014.04.037 
+    CMod <- hydromad(DATA = river.cal,
+                     sma = 'HBV',
+                     routing = NULL,
+                     ck2    = c(0.001, 0.15), # Routing: recession coefficient
+                     ck1    = c(0.01, 0.4),   # Routing: recession coefficient
+                     ck0    = c(0.05, 0.5),   # Routing: recession coefficient
+                     maxbas = c(1, 7),        # Routing: weighting function length
+                     degd   = c(0, 20),       # Snow: degree day factor
+                     degw   = 1,              # Snow: snowmelt threshold
+                     ttlim  = -1.41934,       # Snow: snowfall threshold
+                     beta   = c(1, 6),        # Soil: shape coefficient
+                     lp     = c(0.3, 1),      # Soil: SM threshold for evap reduction
+                     fcap   = c(50, 2000),    # Soil: field capacity
+                     perc   = c(0, 3),        # GW: max percolation
+                     hl1    = c(10, 100),     # GW: quick runoff threshold
+                     return_state = TRUE)
     
     # Fit KGE
     fitKGE <- fitByOptim(CMod,
@@ -112,10 +105,18 @@ parallelRuns <- function(calStart, calEnd, x2) {
                     riverDetails$Catchment.Area..km2.,
                     'KGE',
                     fitKGE$fit.result$message,
-                    fitKGE$parlist$x1,
-                    fitKGE$parlist$x2,
-                    fitKGE$parlist$x3,
-                    fitKGE$parlist$x4,
+                    fitKGE$parlist$ck2,
+                    fitKGE$parlist$ck1,
+                    fitKGE$parlist$ck0,
+                    fitKGE$parlist$maxbas,
+                    fitKGE$parlist$degd,
+                    fitKGE$parlist$degw,
+                    fitKGE$parlist$ttlim,
+                    fitKGE$parlist$perc,
+                    fitKGE$parlist$beta,
+                    fitKGE$parlist$lp,
+                    fitKGE$parlist$fcap,
+                    fitKGE$parlist$hl1,
                     summary(fitKGE)$runoff,
                     summary(fitKGE)$rel.bias,
                     summary(fitKGE)$r.squared,
@@ -135,10 +136,18 @@ parallelRuns <- function(calStart, calEnd, x2) {
                     riverDetails$Catchment.Area..km2.,
                     'NSE',
                     fitNSE$fit.result$message,
-                    fitNSE$parlist$x1,
-                    fitNSE$parlist$x2,
-                    fitNSE$parlist$x3,
-                    fitNSE$parlist$x4,
+                    fitNSE$parlist$ck2,
+                    fitNSE$parlist$ck1,
+                    fitNSE$parlist$ck0,
+                    fitNSE$parlist$maxbas,
+                    fitNSE$parlist$degd,
+                    fitNSE$parlist$degw,
+                    fitNSE$parlist$ttlim,
+                    fitNSE$parlist$perc,
+                    fitNSE$parlist$beta,
+                    fitNSE$parlist$lp,
+                    fitNSE$parlist$fcap,
+                    fitNSE$parlist$hl1,
                     summary(fitNSE)$runoff,
                     summary(fitNSE)$rel.bias,
                     summary(fitNSE)$r.squared,
@@ -158,10 +167,18 @@ parallelRuns <- function(calStart, calEnd, x2) {
                        riverDetails$Catchment.Area..km2.,
                        'RSquaredLog',
                        fitRSQLog$fit.result$message,
-                       fitRSQLog$parlist$x1,
-                       fitRSQLog$parlist$x2,
-                       fitRSQLog$parlist$x3,
-                       fitRSQLog$parlist$x4,
+                       fitRSQLog$parlist$ck2,
+                       fitRSQLog$parlist$ck1,
+                       fitRSQLog$parlist$ck0,
+                       fitRSQLog$parlist$maxbas,
+                       fitRSQLog$parlist$degd,
+                       fitRSQLog$parlist$degw,
+                       fitRSQLog$parlist$ttlim,
+                       fitRSQLog$parlist$perc,
+                       fitRSQLog$parlist$beta,
+                       fitRSQLog$parlist$lp,
+                       fitRSQLog$parlist$fcap,
+                       fitRSQLog$parlist$hl1,
                        summary(fitRSQLog)$runoff,
                        summary(fitRSQLog)$rel.bias,
                        summary(fitRSQLog)$r.squared,
@@ -187,27 +204,15 @@ parallelRuns <- function(calStart, calEnd, x2) {
   stopImplicitCluster()
   stopCluster(cl)
   
-  GR4JSummary <- as.data.frame(r, row.names = FALSE)
-  colnames(GR4JSummary) <- GR4JColNames
+  HBVSummary <- as.data.frame(r, row.names = FALSE)
+  colnames(HBVSummary) <- HBVColNames
   
-  write.csv(GR4JSummary, paste0(runName, '.csv'), row.names = FALSE)
+  write.csv(HBVSummary, paste0(runName, '.csv'), row.names = FALSE)
 }
 
 # Runs
-# Bruce's naming convention
-# x2 = c(-10, 10) = Fitted_xxxx_xxxx_3
-# x2 = c(-30, 20) = Fitted_xxxx_xxxx_2
-# I should change this
-
 parallelRuns(calStart = '1990-01-01',
-             calEnd = '1996-12-31',
-             x2 = c(-10,10))
+             calEnd = '1996-12-31')
+
 parallelRuns(calStart = '2000-01-01',
-             calEnd = '2006-12-31',
-             x2 = c(-10,10))
-# parallelRuns(calStart = '2000-01-01',
-#              calEnd = '2006-12-31',
-#              x2 = c(-30,20))
-# parallelRuns(calStart = '1990-01-01',
-#              calEnd = '1996-12-31',
-#              x2 = c(-30,20))
+             calEnd = '2006-12-31')

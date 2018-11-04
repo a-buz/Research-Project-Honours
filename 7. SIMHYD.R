@@ -1,18 +1,19 @@
-#--------------------------------------------------------------------------------------------------#
-# GR4J model run                                                                                   #
-#--------------------------------------------------------------------------------------------------#
+#----------------------------------------------------------------------------
+# SIMHYD model run
+#----------------------------------------------------------------------------
 
 library(foreach)
 library(doParallel)
 library(hydromad)
+library(Rcpp)
 
 setwd('~/Dropbox (Sydney Uni)/BTPaper/Research-Project-Honours/')
 
 # Set up monolithic function to simplify unattended runs
-parallelRuns <- function(calStart, calEnd, x2) {
-  #----------------------------------------------------------------------------#
-  # Loop preparation #
-  #----------------------------------------------------------------------------#
+parallelRuns <- function(calStart, calEnd) {
+  #----------------------------------------------------------------------------
+  # Loop preparation
+  #----------------------------------------------------------------------------
   # Create KGE objective function
   KGE <- function(Q, X, ...) {
     1 - sqrt(
@@ -22,6 +23,10 @@ parallelRuns <- function(calStart, calEnd, x2) {
     )
   }
   
+  # Source SIMHYD scripts
+  # rcode_dir <- 'SIMHYDCode'
+  # source(paste(rcode_dir, 'Simhyd.R', sep = '/'))
+  
   # River zoo files from previous step containing P, Q, E
   zooFiles <- dir('Data/Zoo', full.names = TRUE)
   # River details look up table
@@ -29,35 +34,14 @@ parallelRuns <- function(calStart, calEnd, x2) {
   riverTable$AWRC.Station.Number <- as.character(riverTable$AWRC.Station.Number)
   riverTable$Station.Name <- as.character(riverTable$Station.Name)
   # Column names for variables collected in loop
-  GR4JColNames <-  c('Number', 
-                     'Name',
-                     'Area',
-                     'objFun',
-                     'Message',
-                     'x1',
-                     'x2',
-                     'x3',
-                     'x4',
-                     'runoff',
-                     'rbias',
-                     'NSE',
-                     'r.sq.sqrt',
-                     'r.sq.log',
-                     'KGE')
-  # Non changing
-  x1 <- c(50,2000)
-  x3 <- c(5,500)
-  x4 <- c(0.5,10)
+  SIMHYDColNames <-  c('Number', 'Name', 'Area', 'objFun', 'Message',
+                       'INSC', 'COEFF', 'SQ', 'SMSC', 'SUB', 'CRAK',
+                       'K', 'runoff', 'rbias', 'NSE', 'r.sq.sqrt',
+                       'r.sq.log', 'KGE')
   
-  # Bruce's naming convention
-  # if(min(x2) == -10 & max(x2) == 10) {
-  #   suffix <- '3' 
-  # } else if(min(x2) == -30 & max(x2) == 20) {
-  #   suffix <- '2'
-  # }
-  
-  runName <- paste0('Data/GR4J/Fitted_', substr(calStart, 1, 4),
-                    '_', substr(calEnd, 1, 4))#, '_', suffix)
+  runName <- paste0('Data/SIMHYD/Fitted_',
+                    substr(calStart, 1, 4),
+                    '_', substr(calEnd, 1, 4))
   
   # Set up dir for output
   if(dir.exists(runName) == FALSE) {
@@ -76,7 +60,8 @@ parallelRuns <- function(calStart, calEnd, x2) {
   writeLines(c(""), paste0(runName, "_log.txt"))
   
   # Start parloop and assign to collector
-  r <- foreach(i=1:nrow(riverTable), .combine=rbind, .packages=c('hydromad')) %dopar% {
+  r <- foreach(i=1:length(zooFiles), .combine=rbind, .packages=c('hydromad', 'Rcpp'),
+               .verbose=TRUE) %dopar% {
     # Write to logfile
     sink(paste0(runName, "_log.txt"), append=TRUE)
     cat(paste(Sys.time(), "Starting iteration", i, "of", nrow(riverTable), "\n"))
@@ -92,14 +77,22 @@ parallelRuns <- function(calStart, calEnd, x2) {
     
     # Set cal period and create hydromad variable
     river.cal <- window(river, start = calStart, end = calEnd)
-    CMod <- hydromad(river.cal,
-                     sma="gr4j",
-                     routing="gr4jrouting",
-                     etmult=1, # Supplied PET
-                     x1 = x1,
-                     x2 = x2,
-                     x3 = x3,
-                     x4 = x4)
+    
+    source('SIMHYD/SIMHYD_C2009.R')
+    
+    # Pars based from here https://journals.ametsoc.org/doi/pdf/10.1175/2009JHM1061.1
+    CMod <- hydromad(DATA = river.cal,
+                     sma = "simhyd_C2009",
+                     routing = NULL,
+                     INSC  = c(0.5, 5),     # Interception store capacity
+                     COEFF = c(50, 500),    # Max infiltration loss
+                     SQ    = c(0, 6),       # Infiltration loss exponent
+                     SMSC  = c(50, 2000),    # Soil moisture store capacity
+                     SUB   = c(0, 1),       # Interflow equation constant
+                     CRAK  = c(0, 1),       # GW recharge constant
+                     K     = c(0.003, 0.3), # Baseflow linear recession par
+                     etmult = 1, # Supplied potential ET
+                     return_state = TRUE)
     
     # Fit KGE
     fitKGE <- fitByOptim(CMod,
@@ -112,10 +105,15 @@ parallelRuns <- function(calStart, calEnd, x2) {
                     riverDetails$Catchment.Area..km2.,
                     'KGE',
                     fitKGE$fit.result$message,
-                    fitKGE$parlist$x1,
-                    fitKGE$parlist$x2,
-                    fitKGE$parlist$x3,
-                    fitKGE$parlist$x4,
+                    #fitKGE$parlist$DELAY,
+                    #fitKGE$parlist$X_m,
+                    fitKGE$parlist$INSC,
+                    fitKGE$parlist$COEFF,
+                    fitKGE$parlist$SQ,
+                    fitKGE$parlist$SMSC,
+                    fitKGE$parlist$SUB,
+                    fitKGE$parlist$CRAK,
+                    fitKGE$parlist$K,
                     summary(fitKGE)$runoff,
                     summary(fitKGE)$rel.bias,
                     summary(fitKGE)$r.squared,
@@ -135,10 +133,15 @@ parallelRuns <- function(calStart, calEnd, x2) {
                     riverDetails$Catchment.Area..km2.,
                     'NSE',
                     fitNSE$fit.result$message,
-                    fitNSE$parlist$x1,
-                    fitNSE$parlist$x2,
-                    fitNSE$parlist$x3,
-                    fitNSE$parlist$x4,
+                    #fitNSE$parlist$DELAY,
+                    #fitNSE$parlist$X_m,
+                    fitNSE$parlist$INSC,
+                    fitNSE$parlist$COEFF,
+                    fitNSE$parlist$SQ,
+                    fitNSE$parlist$SMSC,
+                    fitNSE$parlist$SUB,
+                    fitNSE$parlist$CRAK,
+                    fitNSE$parlist$K,
                     summary(fitNSE)$runoff,
                     summary(fitNSE)$rel.bias,
                     summary(fitNSE)$r.squared,
@@ -158,10 +161,15 @@ parallelRuns <- function(calStart, calEnd, x2) {
                        riverDetails$Catchment.Area..km2.,
                        'RSquaredLog',
                        fitRSQLog$fit.result$message,
-                       fitRSQLog$parlist$x1,
-                       fitRSQLog$parlist$x2,
-                       fitRSQLog$parlist$x3,
-                       fitRSQLog$parlist$x4,
+                       #fitRSQLog$parlist$DELAY,
+                       #fitRSQLog$parlist$X_m,
+                       fitRSQLog$parlist$INSC,
+                       fitRSQLog$parlist$COEFF,
+                       fitRSQLog$parlist$SQ,
+                       fitRSQLog$parlist$SMSC,
+                       fitRSQLog$parlist$SUB,
+                       fitRSQLog$parlist$CRAK,
+                       fitRSQLog$parlist$K,
                        summary(fitRSQLog)$runoff,
                        summary(fitRSQLog)$rel.bias,
                        summary(fitRSQLog)$r.squared,
@@ -187,27 +195,15 @@ parallelRuns <- function(calStart, calEnd, x2) {
   stopImplicitCluster()
   stopCluster(cl)
   
-  GR4JSummary <- as.data.frame(r, row.names = FALSE)
-  colnames(GR4JSummary) <- GR4JColNames
+  SIMHYDSummary <- as.data.frame(r, row.names = FALSE)
+  colnames(SIMHYDSummary) <- SIMHYDColNames
   
-  write.csv(GR4JSummary, paste0(runName, '.csv'), row.names = FALSE)
+  write.csv(SIMHYDSummary, paste0(runName, '.csv'), row.names = FALSE)
 }
 
 # Runs
-# Bruce's naming convention
-# x2 = c(-10, 10) = Fitted_xxxx_xxxx_3
-# x2 = c(-30, 20) = Fitted_xxxx_xxxx_2
-# I should change this
-
 parallelRuns(calStart = '1990-01-01',
-             calEnd = '1996-12-31',
-             x2 = c(-10,10))
+             calEnd = '1996-12-31')
+
 parallelRuns(calStart = '2000-01-01',
-             calEnd = '2006-12-31',
-             x2 = c(-10,10))
-# parallelRuns(calStart = '2000-01-01',
-#              calEnd = '2006-12-31',
-#              x2 = c(-30,20))
-# parallelRuns(calStart = '1990-01-01',
-#              calEnd = '1996-12-31',
-#              x2 = c(-30,20))
+             calEnd = '2006-12-31')

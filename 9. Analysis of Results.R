@@ -1,206 +1,192 @@
-##Analysis of Results:
-
-setwd("F:\\University\\Honours\\Research Project\\Modelling\\Results\\Round 5")
-GR4J.sum <- dir(pattern = "csv")
-GR4J.sum
-
-#Checking COnvergences
-Convergences <- read.csv("F:\\University\\Honours\\Research Project\\Modelling\\Results\\Convergence Checks.csv",
-                         header = TRUE)
-for (i in 1:8) {
-  exclude <- which(Convergences[,i+1] == "false convergence (8)"|
-                   Convergences[,i+1] == "function evaluation limit reached without convergence (9)")
-  print(exclude)
-}
-
-exclude_1990 <- which(Convergences$y6.1990.2 == "false convergence (8)"|
-                        Convergences$y6.1990.2 == "function evaluation limit reached without convergence (9)")
-exclude_2000 <- which(Convergences$y6.2000.2 == "false convergence (8)"|
-                        Convergences$y6.2000.2 == "function evaluation limit reached without convergence (9)")
-
-##Updating based on the exclusions
-
-##Flow duration Curve Analysis
+# Analysis of Results
+library(tidyverse)
 library(hydromad)
-library(ggplot2)
-rm(river)
-rm(riverFit)
 
-##Signature Analysis ##Chiew et al. (2013) line
-GR4J_1990_1996_2 <- read.csv(GR4J.sum[1], header = TRUE)
-deleted_1990 <- GR4J_1990_1996_2[c(exclude_1990),]
-deleted_1990_2 <-  GR4J_2000_2006_2[c(exclude_1990),]
-GR4J_1990_1996_2 <- GR4J_1990_1996_2[-c(exclude_1990),]
+# Final stations
+finalStations <- read_csv('Data/FinalStations.csv')
+finalStations <- finalStations %>% dplyr::rename(Number = `AWRC Station Number`)
 
-GR4J_2000_2006_2 <- read.csv(GR4J.sum[5], header = TRUE)
-deleted_2000 <- GR4J_2000_2006_2[c(exclude_2000),]
-deleted_2000_2 <- GR4J_1990_1996_2[c(exclude_2000),]
-GR4J_2000_2006_2 <- GR4J_2000_2006_2[-c(exclude_2000),]
+# River type to merge into rows
+riverType1990 <- read_csv('Data/RiverType1990-1996.csv')
+riverType1990 <- riverType1990 %>% 
+  dplyr::rename(Number = `AWRC Station Number`)
+riverType2000 <- read_csv('Data/RiverType2000-2006.csv')
+riverType2000 <- riverType2000 %>% 
+  dplyr::rename(Number = `AWRC Station Number`)
+
+# Koppengeiger numbers to add in
+kgRaster <- raster::raster('Data/Aus_KG_1986-2010_5m.grd')
+# levels(kgRaster) to see attributes
+kgAttr <- raster::levels(kgRaster)[[1]]
+# Create points from final stations tables
+stationpts <- sp::SpatialPoints(cbind(finalStations$Longitude,
+                                      finalStations$Latitude),
+                                proj4string = raster::crs(kgRaster))
+finalStations$KGext <- kgAttr$climate[raster::extract(kgRaster, stationpts)]
 
 
-#Rounding off these figures to 2 dp
-GR4J_1990_1996_2[,c(4:13)] <- round(GR4J_1990_1996_2[,c(4:13)], 2)
-GR4J_2000_2006_2[,c(4:13)] <- round(GR4J_2000_2006_2[,c(4:13)], 2)
+#-------------------------------------------------------------------------------
+# Sim
 
-##Plotting these figures
-
-##Low flows >= 90th  percentile
-##High flows <= 25th percentile
-##Mid flow 25th < mid flow < 90th
-
-obs_flow <- dir("F:\\University\\Honours\\Research Project\\Modelling\\zoo SILO", 
-                pattern = ".Rdata")
-obs_flow_1990 <- obs_flow[c(exclude_1990)]
-obs_flow_2000 <- obs_flow[c(exclude_2000)]
-
-sim_flow <- dir("E:\\University\\Honours\\Research Project\\Modelling\\Results\\Round 5\\Fitted_1990_1996_2")
-sim_flow_1990 <- sim_flow[-c(exclude_1990)]
-sim_flow_2000 <- sim_flow[-c(exclude_2000)]
-
-obs.summary2 <- data.frame(Number   = rep(NA, length(obs_flow_2000)), 
-                          cum.flow  = rep(NA, length(obs_flow_2000)),
-                          FDC.low   = rep(NA, length(obs_flow_2000)),
-                          FDC.mid   = rep(NA, length(obs_flow_2000)),
-                          FDC.high  = rep(NA, length(obs_flow_2000)),
-                          AC        = rep(NA, length(obs_flow_2000)),
-                          Peaks     = rep(NA, length(obs_flow_2000)),
-                          slope     = rep(NA, length(obs_flow_2000)))
-
-for (i in 1:length(obs_flow_2000)) {
-  #load(paste(".\\Fitted_2000_2006_2\\", sim_flow_2000[i], sep = ""))
-  load(paste("E:\\University\\Honours\\Data Access\\Modelling\\zoo SILO\\", obs_flow_1990[i], sep = ""))
+simSummary <- function(model, timePeriod) {
+  # Read in summary data
+  filePath <- paste('Data/', model, '/Fitted_', timePeriod, '.csv', sep='')
+  modelSummary <- read_csv(filePath)
   
-  #Getting right dates for the observed flow
-  obs <- window(river, start = "1990-04-10", end = "1996-12-31")
-
-  #Extracting number, name and Area for conversion
-  river.number <- as.character(strsplit(obs_flow_1990[i], ".Rdata"))
-  Area <- read.csv(paste("E:\\University\\Honours\\Data Access\\Modelling\\Rivers\\",river.number, ".csv", sep = ""),
-                   sep = c(" ", ",")) ##Read in river file to extract area
-  Area <- as.numeric(substr(Area[16,1], 1, gregexpr("\\,",Area[16,1])[[1]]-1)) ##Extract Area
-  obs <- convertFlow(obs, from ="ML", area.km2= Area) #Convert flow from ML to mm
+  # Remove false convergences and non-convergences
+  falseConverge <- 'false convergence (8)'
+  evalLimit <- 'function evaluation limit reached without convergence (9)'
   
-  ##Flow duration curve ranking and sorting
-  # n <- nrow(obs)
-  # sort.flow1 <- sort(as.numeric(obs$Q), decreasing = TRUE, na.last=FALSE)
-  # #Sort - just a series of numbers now
-  # rank.flow1 <- 1:n
-  # Prob1 <- rank.flow1/(n+1)
+  # Get converged
+  converged <- modelSummary %>% 
+    filter(!Message %in% c(falseConverge, evalLimit),
+           !Number == 'A0020101') # Remove due to large area
   
-  # m <- length(fitted(riverFit))
-  # sort.flow2 <- sort(as.numeric(fitted(riverFit)), decreasing = TRUE, na.last=FALSE)
-  # #Sort - just a series of numbers now
-  # rank.flow2 <- 1:m
-  # Prob2 <- rank.flow2/(m+1)
+  sim.summary <- converged %>% mutate(Cum.flow  = rep(NA, length(converged$Number)),
+    FDC.low   = rep(NA, length(converged$Number)),
+    FDC.mid   = rep(NA, length(converged$Number)),
+    FDC.high  = rep(NA, length(converged$Number)),
+    AC        = rep(NA, length(converged$Number)),
+    Peaks     = rep(NA, length(converged$Number)),
+    Slope     = rep(NA, length(converged$Number)))
   
-  ##FDC total - Performance metric: NSE
-  # FDC.total <- nseStat(sort.flow1)#, sort.flow2)
+  sim.summary <- inner_join(sim.summary, 
+                            #get(paste0('riverType', substr(timePeriod, 1, 4))) %>% select(Number, Type),
+                            riverType2000 %>% select(Number, Type), # Change to 2000 as it shows really if it is peren or eph
+                            by = 'Number')
   
-  #######cum.flow
-  cum.flow <- sum(obs$Q)
-  #cum.flow <- sum(fitted(riverFit))
+  # Merge in KGext also
+  sim.summary <- inner_join(sim.summary,
+                            finalStations %>% select(Number, KGext),
+                            by = 'Number')
   
-  ##FDC.low - Performance metroc: F
-  FDC.low <- unname(quantile(obs$Q, probs = 0.1)) #abs(1 - quantile(fitted(riverFit), probs = 0.25)/))
-  #FDC.low <- unname(quantile(fitted(riverFit), probs = 0.1)) #/quantile(obs$Q, probs = 0.25)))
+  # Simulated
+  for(i in 1:nrow(sim.summary)) {
+    # Record number and objfun
+    stationNumber <- sim.summary$Number[i]
+    objFun <- sim.summary$objFun[i]
+    
+    # Read in Rdata file
+    load(paste('Data/', model, '/Fitted_', timePeriod, '/', stationNumber, '.Rdata', sep=''))
+    
+    if(objFun == 'KGE') {
+      sim <- fitted$KGE
+    } else if(objFun == 'NSE') {
+      sim <- fitted$NSE
+    } else if(objFun == 'RSquaredLog') {
+      sim <- fitted$RSquaredLog
+    }
+    
+    #######cum.flow
+    cum.flow <- sum(fitted(sim))
+    
+    ##FDC.low - Performance metroc: F
+    FDC.low <- unname(quantile(fitted(sim), probs = 0.1)) #/quantile(obs$Q, probs = 0.25)))
+    
+    ####FDC.High - Performance metroc: F
+    FDC.high <- unname(quantile(fitted(sim), probs = 0.9))#/quantile(obs$Q, probs = 0.75)))
+    
+    ######FDC.Mid - Performance metroc: F
+    FDC.mid <- unname(quantile(fitted(sim), probs = 0.5))#/quantile(obs$Q, probs = 0.5)))
+    
+    ######AC - Performance metroc: F
+    AC.sim <- acf(fitted(sim),  plot = F)$acf[2]
+    
+    ##Peak Distribution - Perforamnce Metric: F
+    Peak.sim <- (quantile(fitted(sim), probs = 0.9)-(quantile(fitted(sim), probs = 0.5)))/(0.9-0.5)
+    
+    #slope mid FDC
+    slope.sim <- unname(diff(quantile(fitted(sim), probs = c(0.25, 0.75))/0.75-0.25))
+    
+    ##Putting into d.frame
+    #sig.summary[i,2] <- signif(FDC.total, 4)
+    sim.summary$Cum.flow[i] <- cum.flow
+    sim.summary$FDC.low[i] <- signif(FDC.low, 4)
+    sim.summary$FDC.mid[i] <- signif(FDC.mid, 4)
+    sim.summary$FDC.high[i] <- signif(FDC.high, 4)
+    sim.summary$AC[i] <- signif(AC.sim, 4)
+    sim.summary$Peaks[i] <- signif(Peak.sim, 4)
+    sim.summary$Slope[i] <- signif(slope.sim, 4)
+  }
   
-  ####FDC.High - Performance metroc: F
-  FDC.high <- unname(quantile(obs$Q, probs = 0.99))#abs(1 - quantile(fitted(riverFit), probs = 0.75)/))
-  #FDC.high <- unname(quantile(fitted(riverFit), probs = 0.9))#/quantile(obs$Q, probs = 0.75)))
+  #Change Inf's to NA
+  sim.summary <- do.call(data.frame, lapply(sim.summary, function(x) replace(x, is.infinite(x),NA)))
   
-  ######FDC.Mid - Performance metroc: F
-  FDC.mid <- unname(quantile(obs$Q, probs = 0.5)) #abs(1 - quantile(fitted(riverFit), probs = 0.5)/))
-  #FDC.mid <- unname(quantile(fitted(riverFit), probs = 0.5))#/quantile(obs$Q, probs = 0.5)))
+  #Correlation matrix
+  modelCor <- cor(sim.summary[,c(17:22)], use = "pairwise.complete.obs", method = "spearman")
   
-  ######AC - Performance metroc: F
-  AC.obs <- acf(obs$Q,  plot = F)$acf[2]
-  #AC.sim <- acf(fitted(riverFit),  plot = F)$acf[2]
-  # AC <- abs(1 - AC.sim/AC.obs)
-  # AC <- AC.sim/AC.obs
-  AC <- AC.obs
-  
-  ##Peak Distribution - Perforamnce Metric: F
-  Peak.obs <- (quantile(obs$Q, probs = 0.9)-(quantile(obs$Q, probs = 0.5)))/(0.9-0.5)
-  #Peak.sim <- (quantile(fitted(riverFit), probs = 0.9)-(quantile(fitted(riverFit), probs = 0.5)))/(0.9-0.5)
-  #Peaks <- abs(1 - Peak.sim/Peak.obs)
-  # Peaks <- Peak.sim/Peak.obs
-  Peaks <- Peak.obs
-  
-  #slope mid FDC
-  slope.obs <- unname(diff((quantile(obs$Q, probs = c(0.33, 0.66))/0.66-0.33)))
-  #slope.sim <- unname(diff(quantile(fitted(riverFit), probs = c(0.25, 0.75))/0.75-0.25))
-  #slope <- abs(1 - slope.sim/slope.obs)
-  # slope <- slope.sim/slope.obs
-  slope <- slope.obs
-  
-  ##Putting into d.frame
-  obs.summary2[i,1] <- river.number
-  #sig.summary[i,2] <- signif(FDC.total, 4)
-  obs.summary2[i,2] <- cum.flow
-  obs.summary2[i,3] <- signif(FDC.low, 4)
-  obs.summary2[i,4] <- signif(FDC.mid, 4)
-  obs.summary2[i,5] <- signif(FDC.high, 4)
-  obs.summary2[i,6] <- signif(AC, 4)
-  obs.summary2[i,7] <- signif(Peaks, 4)
-  obs.summary2[i,8] <- signif(slope, 4)
-  
-  rm(obs)
-  #rm(riverFit)
+  outPath <- paste('Data/Analysis/', timePeriod, '/', model, 'Summary.csv', sep = '')
+  write_csv(sim.summary, outPath)
+  corPath <- paste('Data/Analysis/', timePeriod, '/', model, 'Cor.txt', sep = '')
+  write.table(modelCor, corPath)
 }
-xyplot(riverFit)
-write.csv(obs.summary2, file = "obs.summary3_2000.csv")
 
-#Change Inf's to NA
-sim.summary <- do.call(data.frame,lapply(sim.summary, function(x) replace(x, is.infinite(x),NA)))
+simSummary('GR4J', '1990_1996')
+simSummary('GR4J', '2000_2006')
 
-#Correlation matrix
-cor(sig.summary[,c(2:9)], use = "pairwise.complete.obs", method = "spearman")
+simSummary('SIMHYD', '1990_1996')
+simSummary('SIMHYD', '2000_2006')
 
-##install.packages("hydroTSM") ##For nseStat function
-library(hydroTSM)
-
-########-----------Plotting over Australia---------#############
-#List of stations to extract coordinates:
-Gauges <- read.csv("E:\\University\\Honours\\Data Access\\Modelling\\Final_RiverStations.csv",
-                    header = T)
-Gauges <- Gauges[order(Gauges[,1]),]
-rownames(Gauges) <- NULL
-
-sig.summary$Lat <- Gauges$LAT
-sig.summary$Lon <- Gauges$LON
-
-library(ggplot2)
-
-ggplot(sig.summary, aes(x = Lon, y = Lat))  + geom_point(aes(color = GR4J_1990_1996_2$objFun)) + 
-  scale_color_continuous(low = "blue", high = "green")
-
-###---------annual variation and random shit using hydromad?acf------##############
-
-ann.sim <- aggregate(fitted(riverFit),by=list(Year=format(time(fitted(riverFit)),"%Y")), sum, na.rm=TRUE)
-ann.obs <- aggregate(obs$Q, by=list(Year=format(time(obs),"%Y")), sum, na.rm=TRUE)
+simSummary('HBV', '1990_1996')
+simSummary('HBV', '2000_2006')
 
 
-plot(as.numeric(time(ann.sim)),ann.sim, ylab="Flow (ML/year)", xlab="Year",type="h", col="blue")
-lines(as.numeric(time(ann.obs)),ann.obs, ylab="Flow (ML/year)", xlab="Year",type="h", col="red")
-ann.sim-ann.obs
-
-xyplot(riverFit)
-stats <- summary(riverFit, breaks = "1 year")
-statsSeries <- stats[,c("r.squared", "r.sq.sqrt", "rel.bias", "runoff")]
-statsSeries[,c(1,2)] <- pmax(statsSeries[, 1:2], 0)
-c(xyplot(statsSeries, type = "s", lwd = 2, ylab = "statistic",
-         xlab = NULL), `observed streamflow` = xyplot(observed(riverFit)),
-  layout = c(1, 5), x.same = TRUE) + layer_(panel.refline(h = 0,
-                                                          v = time(statsSeries)))
-xyplot(window(obs, start = "2002-01-01", end = "2002-12-31"))
-
-qqmath(riverFit, scales = list(y = list(log = TRUE)),
-       type = c("l", "g"))
-
-qqmath(riverFit, type = c("l", "g"), scales = list(y = list(log = TRUE)),
-       xlab = "Standard normal variate", ylab = "Flow (mm/day)",
-       f.value = ppoints(100), tails.n = 50, as.table = TRUE)
-
-nseStat(window(fitted(riverFit), start = "2000-01-01", end = "2001-12-31"),window(obs$Q, start = "2000-01-01", end = "2001-12-31"))
-
-
+# 
+# 
+# #-------------------------------------------------------------------------------
+# # Obs
+# # Flow duration Curve Analysis
+# obs.summary <- tibble(Number    = finalStations$`AWRC Station Number`,
+#                       cum.flow  = rep(NA, nrow(finalStations)),
+#                       FDC.low   = rep(NA, nrow(finalStations)),
+#                       FDC.mid   = rep(NA, nrow(finalStations)),
+#                       FDC.high  = rep(NA, nrow(finalStations)),
+#                       AC        = rep(NA, nrow(finalStations)),
+#                       Peaks     = rep(NA, nrow(finalStations)),
+#                       slope     = rep(NA, nrow(finalStations)))
+# 
+# 
+# for (i in 1:nrow(finalStations)) {
+#   # Read in zoo file
+#   obs <- read.zoo(paste0('Data/Zoo/', finalStations$`AWRC Station Number`[i]), header = TRUE)
+#   obs <- window(obs, start = "1990-04-11", end = "1996-12-31")
+#   
+#   #######cum.flow
+#   cum.flow <- sum(obs$Q)
+#   
+#   ##FDC.low - Performance metroc: F
+#   FDC.low <- unname(quantile(obs$Q, probs = 0.1))
+#   
+#   ####FDC.High - Performance metroc: F
+#   FDC.high <- unname(quantile(obs$Q, probs = 0.99))
+#   
+#   ######FDC.Mid - Performance metroc: F
+#   FDC.mid <- unname(quantile(obs$Q, probs = 0.5))
+#   
+#   ######AC - Performance metric: F
+#   AC.obs <- acf(obs$Q,  plot = F)$acf[2]
+#   AC <- AC.obs
+#   
+#   ##Peak Distribution - Perforamnce Metric: F
+#   Peak.obs <- (quantile(obs$Q, probs = 0.9)-(quantile(obs$Q, probs = 0.5)))/(0.9-0.5)
+#   Peaks <- Peak.obs
+#   
+#   #slope mid FDC
+#   slope.obs <- unname(diff((quantile(obs$Q, probs = c(0.33, 0.66))/0.66-0.33)))
+#   slope <- slope.obs
+#   
+#   ##Putting into d.frame
+#   obs.summary[i,1] <- finalStations$`AWRC Station Number`[i]
+#   obs.summary[i,2] <- cum.flow
+#   obs.summary[i,3] <- signif(FDC.low, 4)
+#   obs.summary[i,4] <- signif(FDC.mid, 4)
+#   obs.summary[i,5] <- signif(FDC.high, 4)
+#   obs.summary[i,6] <- signif(AC, 4)
+#   obs.summary[i,7] <- signif(Peaks, 4)
+#   obs.summary[i,8] <- signif(slope, 4)
+# }
+# 
+# ObsCor <- cor(obs.summary[,c(2:8)], use = "pairwise.complete.obs", method = "spearman")
+# 
+# write_csv(obs.summary, 'Data/Analysis/1990_1996/ObsSummary.csv')
+# write.table(ObsCor, 'Data/Analysis/1990_1996/ObsCor.txt')

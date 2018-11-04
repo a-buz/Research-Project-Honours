@@ -35,17 +35,19 @@ for(i in 1:nrow(rivers)) {
   
   # SILO data
   silo <- read_csv(paste0('Data/SILO/Patched/', basename(riverFileName)))
+  silo$mean_temp <- (silo$max_temp + silo$min_temp)/2
+  
   # Select Date, P, Morton pET
   silo <- silo %>%
-    select(date, daily_rain, et_morton_potential)
-  colnames(silo) <- c('Date', 'P', 'E')
+    select(date, daily_rain, et_morton_potential, mean_temp)
+  colnames(silo) <- c('Date', 'P', 'E', 'T')
   
   # Merge tables
   joinedTBL <- left_join(river, silo, by = 'Date') %>% 
-    select(Date, P, Q, E)
+    select(Date, P, Q, E, T)
   
   # Create zoo object
-  riverZoo <- zoo(joinedTBL[,2:4], order.by = joinedTBL$Date)
+  riverZoo <- zoo(joinedTBL[,2:5], order.by = joinedTBL$Date)
   # Create dir to write
   if(dir.exists('Data/Zoo') == FALSE) {
     dir.create('Data/Zoo', recursive = TRUE, showWarnings = FALSE)
